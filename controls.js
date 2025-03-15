@@ -18,14 +18,14 @@ function handleDeviceMotion(event) {
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
         
+        // FIXED: Invert X for all devices for more intuitive control
+        // FIXED: For iOS Safari, invert Y (since Safari already inverts it compared to other browsers)
         if (isIOS && isSafari) {
-            // For iOS Safari
-            ball.vx += accX * 0.3;  // Normal x
-            ball.vy += accY * 0.3;  // Normal y for iOS Safari (already inverted)
+            ball.vx += accX * -0.3;  // Invert X for better control
+            ball.vy += accY * -0.3;  // Invert Y for iOS Safari
         } else {
-            // For other browsers
-            ball.vx += accX * 0.3;  // Normal x
-            ball.vy += accY * -0.3; // Inverted y for better control
+            ball.vx += accX * -0.3;  // Invert X for better control
+            ball.vy += accY * 0.3;   // Normal Y for other browsers
         }
     }
 }
