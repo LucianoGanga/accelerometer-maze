@@ -1,6 +1,6 @@
 // Device motion and touch controls
 
-// Handle device motion with comprehensive fixes for different platforms
+// Handle device motion with fixed tilt directions
 function handleDeviceMotion(event) {
     if (!gameRunning) return;
     
@@ -14,29 +14,41 @@ function handleDeviceMotion(event) {
         const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
         const isAndroid = /Android/.test(navigator.userAgent);
         
-        // Apply platform-specific acceleration mappings
+        // CORRECTED TILT DIRECTIONS: 
+        // For all platforms, we're trying a completely different approach:
+        // Tilt right (positive X) should move ball right (positive vx)
+        // Tilt forward (negative Y) should move ball down (positive vy)
+        
         if (isIOS && isSafari) {
-            // iOS Safari specific handling
-            // Try flipping both directions
-            ball.vx -= acceleration.x * 0.3;
-            ball.vy += acceleration.y * 0.3;
-            
-            // Add debug info if in debug mode
-            if (window.debugMode) {
-                console.log("iOS Safari acceleration:", acceleration.x, acceleration.y);
-            }
+            // iOS Safari
+            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
+            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
         } else if (isIOS) {
             // Other iOS browsers
-            ball.vx -= acceleration.x * 0.3;
-            ball.vy -= acceleration.y * 0.3;
+            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
+            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
         } else if (isAndroid) {
-            // Android specific
-            ball.vx -= acceleration.x * 0.3;
-            ball.vy += acceleration.y * 0.3;
+            // Android
+            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
+            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
         } else {
-            // Default for other devices
-            ball.vx -= acceleration.x * 0.3;
-            ball.vy -= acceleration.y * 0.3;
+            // Default
+            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
+            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
+        }
+        
+        // Display debug info if enabled
+        if (window.debugMode) {
+            const debugEl = document.getElementById('debug-info');
+            if (debugEl) {
+                debugEl.innerHTML = `
+                    AccX: ${acceleration.x.toFixed(2)}<br>
+                    AccY: ${acceleration.y.toFixed(2)}<br>
+                    AccZ: ${acceleration.z.toFixed(2)}<br>
+                    vx: ${ball.vx.toFixed(2)}<br>
+                    vy: ${ball.vy.toFixed(2)}
+                `;
+            }
         }
     }
 }
@@ -44,28 +56,28 @@ function handleDeviceMotion(event) {
 // Toggle debug mode for acceleration values
 function toggleDebugMode() {
     window.debugMode = !window.debugMode;
-    const debugInfo = document.createElement('div');
-    debugInfo.id = 'debug-info';
-    debugInfo.style.position = 'absolute';
-    debugInfo.style.bottom = '10px';
-    debugInfo.style.left = '10px';
-    debugInfo.style.color = 'white';
-    debugInfo.style.backgroundColor = 'rgba(0,0,0,0.5)';
-    debugInfo.style.padding = '5px';
-    document.body.appendChild(debugInfo);
     
-    // Update debug info
-    window.addEventListener('devicemotion', (event) => {
-        if (!window.debugMode) return;
-        
-        const acceleration = event.accelerationIncludingGravity;
-        if (acceleration) {
-            const debugEl = document.getElementById('debug-info');
-            if (debugEl) {
-                debugEl.innerHTML = `AccX: ${acceleration.x.toFixed(2)}<br>AccY: ${acceleration.y.toFixed(2)}<br>AccZ: ${acceleration.z.toFixed(2)}`;
-            }
+    // Create or remove debug info element
+    if (window.debugMode) {
+        if (!document.getElementById('debug-info')) {
+            const debugInfo = document.createElement('div');
+            debugInfo.id = 'debug-info';
+            debugInfo.style.position = 'absolute';
+            debugInfo.style.bottom = '50px';
+            debugInfo.style.left = '10px';
+            debugInfo.style.color = 'white';
+            debugInfo.style.backgroundColor = 'rgba(0,0,0,0.5)';
+            debugInfo.style.padding = '5px';
+            debugInfo.style.zIndex = '1000';
+            debugInfo.style.fontSize = '14px';
+            document.body.appendChild(debugInfo);
         }
-    });
+    } else {
+        const debugEl = document.getElementById('debug-info');
+        if (debugEl) {
+            debugEl.remove();
+        }
+    }
 }
 
 // Add orientation change listener to recalibrate
@@ -162,9 +174,14 @@ function initKeyboardControls() {
         if (key === 'ArrowUp') ball.vy -= force;
         if (key === 'ArrowDown') ball.vy += force;
         
-        // Debug mode toggle
+        // Debug mode toggle with 'd' key
         if (key === 'd') {
             toggleDebugMode();
+        }
+        
+        // Control mode toggle with 'c' key
+        if (key === 'c') {
+            toggleControlMode();
         }
     });
 }
