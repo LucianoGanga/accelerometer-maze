@@ -1,6 +1,6 @@
 // Device motion and touch controls
 
-// Handle device motion with fixed tilt directions
+// Handle device motion with CORRECT tilt directions
 function handleDeviceMotion(event) {
     if (!gameRunning) return;
     
@@ -9,33 +9,17 @@ function handleDeviceMotion(event) {
     
     // Check if acceleration data is available
     if (acceleration) {
-        // Detect device and browser
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-        const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-        const isAndroid = /Android/.test(navigator.userAgent);
+        // CORRECTED TILT DIRECTIONS:
+        // This is the correct approach for natural tilting:
+        // When you tilt right (positive X), ball should move right (positive vx)
+        // When you tilt left (negative X), ball should move left (negative vx)
+        // When you tilt forward (negative Y), ball should move forward/down (positive vy)
+        // When you tilt back (positive Y), ball should move back/up (negative vy)
         
-        // CORRECTED TILT DIRECTIONS: 
-        // For all platforms, we're trying a completely different approach:
-        // Tilt right (positive X) should move ball right (positive vx)
-        // Tilt forward (negative Y) should move ball down (positive vy)
-        
-        if (isIOS && isSafari) {
-            // iOS Safari
-            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
-            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
-        } else if (isIOS) {
-            // Other iOS browsers
-            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
-            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
-        } else if (isAndroid) {
-            // Android
-            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
-            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
-        } else {
-            // Default
-            ball.vx += acceleration.x * 0.3;  // Tilt right → move right
-            ball.vy -= acceleration.y * 0.3;  // Tilt forward → move down
-        }
+        // With accelerometer, X is already correct (tilt right = positive X)
+        // But Y needs to be inverted (tilt forward = negative Y, but we want positive vy)
+        ball.vx = acceleration.x * 0.3;   // Direct mapping (no += to avoid accumulation)
+        ball.vy = -acceleration.y * 0.3;  // Invert Y axis
         
         // Display debug info if enabled
         if (window.debugMode) {
