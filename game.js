@@ -84,13 +84,11 @@ startButton.addEventListener('click', async () => {
     initGame();
 });
 
-// Initialize controls
-initTouchControls();
-initKeyboardControls();
-initFullscreenButton();
-
 // Handle window resize
 window.addEventListener('resize', resizeCanvas);
 
 // Initial canvas setup
 resizeCanvas();
+
+// Initialize all controls
+initControls();
