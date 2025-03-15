@@ -135,6 +135,7 @@
         function resetBall() {
             // Ball properties
             const ballRadius = Math.min(canvas.width, canvas.height) * 0.025;
+            // Position ball at the top entry point
             ball = {
                 x: canvas.width * 0.5,
                 y: ballRadius * 2,
@@ -145,7 +146,7 @@
             };
         }
         
-        // Create maze with walls
+        // Create maze with walls - proper single entry/exit path
         function createMaze() {
             maze = {
                 walls: [],
@@ -155,69 +156,216 @@
             // Clear existing walls
             maze.walls = [];
             
-            // Create a more complex maze based on level
-            const complexity = currentLevel * 2;
-            const numHorizontalWalls = 3 + currentLevel;
-            const numVerticalWalls = 2 + currentLevel;
+            // Define the entry point at the top
+            const entryWidth = maze.wallWidth * 3;
+            const entryX = canvas.width / 2 - entryWidth / 2;
             
-            // Create horizontal walls with gaps
-            for (let i = 1; i <= numHorizontalWalls; i++) {
-                const y = (canvas.height / (numHorizontalWalls + 1)) * i;
-                const gap = Math.random() * 0.6 + 0.2; // Gap position (20-80% of width)
-                const gapWidth = (0.2 - currentLevel * 0.01) * canvas.width; // Gap width gets smaller with level
-                
-                // Wall before gap
-                maze.walls.push({
-                    x: 0,
-                    y: y,
-                    width: canvas.width * gap - gapWidth / 2,
-                    height: maze.wallWidth,
-                    color: '#aaaaaa'
-                });
-                
-                // Wall after gap
-                maze.walls.push({
-                    x: canvas.width * gap + gapWidth / 2,
-                    y: y,
-                    width: canvas.width - (canvas.width * gap + gapWidth / 2),
-                    height: maze.wallWidth,
-                    color: '#aaaaaa'
-                });
+            // Create top wall with entry point
+            maze.walls.push({
+                x: 0,
+                y: 0,
+                width: entryX,
+                height: maze.wallWidth,
+                color: '#aaaaaa'
+            });
+            
+            maze.walls.push({
+                x: entryX + entryWidth,
+                y: 0,
+                width: canvas.width - (entryX + entryWidth),
+                height: maze.wallWidth,
+                color: '#aaaaaa'
+            });
+            
+            // Create bottom wall with exit point (will be replaced by exit object)
+            const exitWidth = maze.wallWidth * 3;
+            const exitX = canvas.width / 2 - exitWidth / 2;
+            
+            maze.walls.push({
+                x: 0,
+                y: canvas.height - maze.wallWidth,
+                width: exitX,
+                height: maze.wallWidth,
+                color: '#aaaaaa'
+            });
+            
+            maze.walls.push({
+                x: exitX + exitWidth,
+                y: canvas.height - maze.wallWidth,
+                width: canvas.width - (exitX + exitWidth),
+                height: maze.wallWidth,
+                color: '#aaaaaa'
+            });
+            
+            // Add left and right borders
+            maze.walls.push({
+                x: 0,
+                y: 0,
+                width: maze.wallWidth,
+                height: canvas.height,
+                color: '#aaaaaa'
+            });
+            
+            maze.walls.push({
+                x: canvas.width - maze.wallWidth,
+                y: 0,
+                width: maze.wallWidth,
+                height: canvas.height,
+                color: '#aaaaaa'
+            });
+            
+            // Create internal maze structure based on level
+            const complexity = Math.min(6, currentLevel + 2); // Limit complexity
+            const rows = complexity;
+            const cols = complexity;
+            
+            // Create a grid-based maze
+            const cellWidth = (canvas.width - 2 * maze.wallWidth) / cols;
+            const cellHeight = (canvas.height - 2 * maze.wallWidth) / rows;
+            
+            // Generate maze using a simplified recursive backtracking algorithm
+            const grid = [];
+            for (let r = 0; r < rows; r++) {
+                grid[r] = [];
+                for (let c = 0; c < cols; c++) {
+                    grid[r][c] = {
+                        visited: false,
+                        walls: {
+                            top: true,
+                            right: true,
+                            bottom: true,
+                            left: true
+                        }
+                    };
+                }
             }
             
-            // Add some vertical walls
-            for (let i = 0; i < numVerticalWalls; i++) {
-                const x = (canvas.width / (numVerticalWalls + 1)) * (i + 1);
-                const gap = Math.random() * 0.6 + 0.2; // Gap position (20-80% of height)
-                const gapHeight = (0.2 - currentLevel * 0.01) * canvas.height; // Gap height gets smaller with level
+            // Create a path through the maze
+            function carvePathFrom(r, c) {
+                grid[r][c].visited = true;
                 
-                // Wall before gap
-                maze.walls.push({
-                    x: x,
-                    y: 0,
-                    width: maze.wallWidth,
-                    height: canvas.height * gap - gapHeight / 2,
-                    color: '#aaaaaa'
-                });
+                // Random order to check neighbors
+                const directions = ["top", "right", "bottom", "left"];
+                shuffleArray(directions);
                 
-                // Wall after gap
-                maze.walls.push({
-                    x: x,
-                    y: canvas.height * gap + gapHeight / 2,
-                    width: maze.wallWidth,
-                    height: canvas.height - (canvas.height * gap + gapHeight / 2),
-                    color: '#aaaaaa'
-                });
+                for (const direction of directions) {
+                    let nr = r, nc = c;
+                    
+                    if (direction === "top") nr--;
+                    else if (direction === "right") nc++;
+                    else if (direction === "bottom") nr++;
+                    else if (direction === "left") nc--;
+                    
+                    // Check if neighbor is valid and not visited
+                    if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !grid[nr][nc].visited) {
+                        // Remove walls between current cell and neighbor
+                        if (direction === "top") {
+                            grid[r][c].walls.top = false;
+                            grid[nr][nc].walls.bottom = false;
+                        } else if (direction === "right") {
+                            grid[r][c].walls.right = false;
+                            grid[nr][nc].walls.left = false;
+                        } else if (direction === "bottom") {
+                            grid[r][c].walls.bottom = false;
+                            grid[nr][nc].walls.top = false;
+                        } else if (direction === "left") {
+                            grid[r][c].walls.left = false;
+                            grid[nr][nc].walls.right = false;
+                        }
+                        
+                        // Continue carving path from neighbor
+                        carvePathFrom(nr, nc);
+                    }
+                }
+            }
+            
+            // Ensure there's a clear path from top to bottom
+            // Start at a random column in the top row
+            const startCol = Math.floor(Math.random() * cols);
+            carvePathFrom(0, startCol);
+            
+            // Now ensure there's a path to the bottom
+            let bottomRowConnected = false;
+            for (let c = 0; c < cols; c++) {
+                if (!grid[rows-1][c].walls.bottom) {
+                    bottomRowConnected = true;
+                    break;
+                }
+            }
+            
+            // If no connection to bottom, create one
+            if (!bottomRowConnected) {
+                const endCol = Math.floor(Math.random() * cols);
+                grid[rows-1][endCol].walls.bottom = false;
+            }
+            
+            // Convert grid to wall objects
+            for (let r = 0; r < rows; r++) {
+                for (let c = 0; c < cols; c++) {
+                    const cell = grid[r][c];
+                    const x = maze.wallWidth + c * cellWidth;
+                    const y = maze.wallWidth + r * cellHeight;
+                    
+                    // Add walls that still exist
+                    if (cell.walls.top) {
+                        maze.walls.push({
+                            x: x,
+                            y: y,
+                            width: cellWidth,
+                            height: maze.wallWidth,
+                            color: '#aaaaaa'
+                        });
+                    }
+                    
+                    if (cell.walls.left) {
+                        maze.walls.push({
+                            x: x,
+                            y: y,
+                            width: maze.wallWidth,
+                            height: cellHeight,
+                            color: '#aaaaaa'
+                        });
+                    }
+                    
+                    if (cell.walls.right && c === cols - 1) {
+                        maze.walls.push({
+                            x: x + cellWidth - maze.wallWidth,
+                            y: y,
+                            width: maze.wallWidth,
+                            height: cellHeight,
+                            color: '#aaaaaa'
+                        });
+                    }
+                    
+                    if (cell.walls.bottom && r === rows - 1) {
+                        maze.walls.push({
+                            x: x,
+                            y: y + cellHeight - maze.wallWidth,
+                            width: cellWidth,
+                            height: maze.wallWidth,
+                            color: '#aaaaaa'
+                        });
+                    }
+                }
             }
             
             // Create exit
             exit = {
-                x: canvas.width * 0.5,
+                x: exitX,
                 y: canvas.height - maze.wallWidth * 2,
-                width: maze.wallWidth * 3,
+                width: exitWidth,
                 height: maze.wallWidth * 2,
                 color: '#44ff44'
             };
+        }
+        
+        // Helper function to shuffle array
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
         }
         
         // Game loop
@@ -377,10 +525,39 @@
         
         // Level complete
         function levelComplete() {
+            // Display level complete message
+            const levelComplete = document.createElement('div');
+            levelComplete.style.position = 'absolute';
+            levelComplete.style.top = '50%';
+            levelComplete.style.left = '50%';
+            levelComplete.style.transform = 'translate(-50%, -50%)';
+            levelComplete.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            levelComplete.style.color = 'white';
+            levelComplete.style.padding = '20px';
+            levelComplete.style.borderRadius = '10px';
+            levelComplete.style.fontSize = '24px';
+            levelComplete.style.textAlign = 'center';
+            levelComplete.style.zIndex = '100';
+            levelComplete.innerHTML = `<p>Level ${currentLevel} Complete!</p><p>Starting Level ${currentLevel + 1}...</p>`;
+            
+            document.body.appendChild(levelComplete);
+            
+            // Increment level
             currentLevel++;
             levelInfo.textContent = `Level: ${currentLevel}`;
-            createMaze();
-            resetBall();
+            
+            // Briefly pause game
+            gameRunning = false;
+            
+            // Remove message and continue after delay
+            setTimeout(() => {
+                document.body.removeChild(levelComplete);
+                gameRunning = true;
+                createMaze();
+                resetBall();
+                // Continue game loop
+                requestAnimationFrame(gameLoop);
+            }, 2000);
         }
         
         // Handle device motion
@@ -393,9 +570,9 @@
             // Check if acceleration data is available
             if (acceleration) {
                 // Apply acceleration to ball velocity
-                // Note: we invert the acceleration for intuitive control
-                ball.vx += acceleration.x * -0.3;
-                ball.vy += acceleration.y * 0.3;
+                // Fixed: Corrected the direction by removing the negation for x and changing y direction
+                ball.vx += acceleration.x * 0.3;
+                ball.vy += acceleration.y * -0.3; // Negative for intuitive control
             } else {
                 // Fallback for devices without accelerometer or when data isn't available
                 // We'll use keyboard arrows for testing
