@@ -144,6 +144,25 @@ function createMaze() {
     maze.walls = [];
     obstacles = [];
     
+    // Create the maze with the specified seed
+    createMazeWithSeed(random, config);
+    
+    // Validate that exit is not blocked
+    validateMazeExit();
+    
+    // Add obstacles based on level config
+    addObstacles(config, random, maze.cellWidth, maze.cellHeight);
+    
+    // Clear any obstacles near the exit and entrance to ensure accessibility
+    clearSafeZones();
+}
+
+// Create maze with specific seed - separated for reuse in validation
+function createMazeWithSeed(random, config) {
+    if (!config) {
+        config = getLevelConfig();
+    }
+    
     // Define the entry point at the top
     const entryWidth = maze.wallWidth * 3;
     const entryX = canvas.width / 2 - entryWidth / 2;
@@ -208,8 +227,8 @@ function createMaze() {
     const cols = config.gridSize;
     
     // Create a grid-based maze
-    const cellWidth = (canvas.width - 2 * maze.wallWidth) / cols;
-    const cellHeight = (canvas.height - 2 * maze.wallWidth) / rows;
+    maze.cellWidth = (canvas.width - 2 * maze.wallWidth) / cols;
+    maze.cellHeight = (canvas.height - 2 * maze.wallWidth) / rows;
     
     // Generate maze using a simplified recursive backtracking algorithm
     const grid = [];
@@ -322,15 +341,15 @@ function createMaze() {
     for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
             const cell = grid[r][c];
-            const x = maze.wallWidth + c * cellWidth;
-            const y = maze.wallWidth + r * cellHeight;
+            const x = maze.wallWidth + c * maze.cellWidth;
+            const y = maze.wallWidth + r * maze.cellHeight;
             
             // Add walls that still exist
             if (cell.walls.top) {
                 maze.walls.push({
                     x: x,
                     y: y,
-                    width: cellWidth,
+                    width: maze.cellWidth,
                     height: maze.wallWidth,
                     color: '#aaaaaa'
                 });
@@ -341,17 +360,17 @@ function createMaze() {
                     x: x,
                     y: y,
                     width: maze.wallWidth,
-                    height: cellHeight,
+                    height: maze.cellHeight,
                     color: '#aaaaaa'
                 });
             }
             
             if (cell.walls.right && c === cols - 1) {
                 maze.walls.push({
-                    x: x + cellWidth - maze.wallWidth,
+                    x: x + maze.cellWidth - maze.wallWidth,
                     y: y,
                     width: maze.wallWidth,
-                    height: cellHeight,
+                    height: maze.cellHeight,
                     color: '#aaaaaa'
                 });
             }
@@ -359,8 +378,8 @@ function createMaze() {
             if (cell.walls.bottom && r === rows - 1) {
                 maze.walls.push({
                     x: x,
-                    y: y + cellHeight - maze.wallWidth,
-                    width: cellWidth,
+                    y: y + maze.cellHeight - maze.wallWidth,
+                    width: maze.cellWidth,
                     height: maze.wallWidth,
                     color: '#aaaaaa'
                 });
@@ -376,12 +395,139 @@ function createMaze() {
         height: maze.wallWidth * 3,
         color: '#00ff00' // Brighter green
     };
+}
+
+// Validate that the exit is not blocked by any walls
+function validateMazeExit() {
+    // Find all walls that could potentially block the exit
+    const exitBlockers = maze.walls.filter(wall => {
+        // Check if this wall intersects with the exit
+        return (
+            wall.y < exit.y + exit.height &&
+            wall.y + wall.height > exit.y &&
+            wall.x < exit.x + exit.width &&
+            wall.x + wall.width > exit.x
+        );
+    });
     
-    // Add obstacles based on level config
-    addObstacles(config, random, cellWidth, cellHeight);
+    // If any walls intersect with the exit, regenerate the maze with a modified seed
+    if (exitBlockers.length > 0) {
+        console.log("Detected invalid maze with blocked exit. Regenerating...");
+        // Modify the seed to get a different layout
+        const config = getLevelConfig();
+        const newSeed = config.seed + 100 + currentLevel;
+        
+        // Create a new random generator with the modified seed
+        const newRandom = new SeededRandom(newSeed);
+        
+        // Clear current maze and recreate with new seed
+        maze.walls = [];
+        obstacles = [];
+        
+        // Recreate the maze with the new seed
+        createMazeWithSeed(newRandom, config);
+        
+        // Validate again (recursive check)
+        validateMazeExit();
+    }
     
-    // Clear any obstacles near the exit and entrance to ensure accessibility
-    clearSafeZones();
+    // Now verify that there is a valid path from start to exit
+    verifyPathToExit();
+}
+
+// Use a simple flood fill algorithm to verify there's a path from start to exit
+function verifyPathToExit() {
+    // Create a grid of cells to track what's been visited
+    const cellSize = maze.wallWidth;
+    const rows = Math.ceil(canvas.height / cellSize);
+    const cols = Math.ceil(canvas.width / cellSize);
+    
+    const grid = Array(rows).fill().map(() => Array(cols).fill(false));
+    
+    // Mark cells containing walls as blocked
+    for (const wall of maze.walls) {
+        const startCol = Math.floor(wall.x / cellSize);
+        const endCol = Math.ceil((wall.x + wall.width) / cellSize);
+        const startRow = Math.floor(wall.y / cellSize);
+        const endRow = Math.ceil((wall.y + wall.height) / cellSize);
+        
+        for (let r = startRow; r < endRow; r++) {
+            for (let c = startCol; c < endCol; c++) {
+                if (r >= 0 && r < rows && c >= 0 && c < cols) {
+                    grid[r][c] = true; // Mark as blocked
+                }
+            }
+        }
+    }
+    
+    // Start flood fill from the entry point
+    const startX = Math.floor(canvas.width / 2 / cellSize);
+    const startY = Math.floor(ball.radius * 2 / cellSize);
+    const visited = Array(rows).fill().map(() => Array(cols).fill(false));
+    
+    // Queue for BFS
+    const queue = [{x: startX, y: startY}];
+    visited[startY][startX] = true;
+    
+    // Define exit area for checking
+    const exitStartCol = Math.floor(exit.x / cellSize);
+    const exitEndCol = Math.ceil((exit.x + exit.width) / cellSize);
+    const exitStartRow = Math.floor(exit.y / cellSize);
+    const exitEndRow = Math.ceil((exit.y + exit.height) / cellSize);
+    
+    let pathFound = false;
+    
+    // BFS to find path
+    while (queue.length > 0) {
+        const {x, y} = queue.shift();
+        
+        // Check if we've reached the exit
+        if (y >= exitStartRow && y < exitEndRow && x >= exitStartCol && x < exitEndCol) {
+            pathFound = true;
+            break;
+        }
+        
+        // Check all 4 directions
+        const directions = [
+            {dx: 1, dy: 0},
+            {dx: -1, dy: 0},
+            {dx: 0, dy: 1},
+            {dx: 0, dy: -1}
+        ];
+        
+        for (const {dx, dy} of directions) {
+            const newX = x + dx;
+            const newY = y + dy;
+            
+            // Check if in bounds and not visited or blocked
+            if (newX >= 0 && newX < cols && newY >= 0 && newY < rows && 
+                !visited[newY][newX] && !grid[newY][newX]) {
+                visited[newY][newX] = true;
+                queue.push({x: newX, y: newY});
+            }
+        }
+    }
+    
+    // If no path is found, regenerate the maze
+    if (!pathFound) {
+        console.log("No valid path to exit found. Regenerating maze...");
+        // Use a different seed for regeneration
+        const config = getLevelConfig();
+        const newSeed = config.seed + 200 + currentLevel;
+        
+        // Create a new random generator with the modified seed
+        const newRandom = new SeededRandom(newSeed);
+        
+        // Clear current maze and recreate
+        maze.walls = [];
+        obstacles = [];
+        
+        // Recreate the maze with the new seed
+        createMazeWithSeed(newRandom, config);
+        
+        // Recursively check again
+        validateMazeExit();
+    }
 }
 
 // Clear areas around exit and entrance to ensure they're accessible
