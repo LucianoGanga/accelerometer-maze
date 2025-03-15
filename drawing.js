@@ -22,34 +22,26 @@ function drawGame() {
     
     // Draw obstacles with enhanced visuals
     for (const obstacle of obstacles) {
-        if (obstacle.update) {
-            obstacle.update();
-        }
-        
         // Draw different obstacle types with more visual appeal
         switch(obstacle.type) {
             case 'spike':
                 // Draw spikes with gradient and metallic look
-                const spikeCount = 3;
-                const spikeWidth = obstacle.width / spikeCount;
-                
-                for (let i = 0; i < spikeCount; i++) {
+                if (obstacle.points && obstacle.points.length === 3) {
                     // Create a more dramatic gradient for spikes
                     const spikeGradient = ctx.createLinearGradient(
-                        obstacle.x + i * spikeWidth, 
-                        obstacle.y + obstacle.height,
-                        obstacle.x + (i + 0.5) * spikeWidth, 
-                        obstacle.y
+                        obstacle.points[1].x, obstacle.points[1].y, // Top point
+                        obstacle.points[0].x, obstacle.points[0].y  // Bottom point
                     );
-                    spikeGradient.addColorStop(0, '#600');  // Dark red at base
-                    spikeGradient.addColorStop(0.7, '#f00'); // Bright red near tip
-                    spikeGradient.addColorStop(1, '#ff6666'); // Light red at tip
+                    spikeGradient.addColorStop(0, '#ff6666'); // Light red at tip
+                    spikeGradient.addColorStop(0.3, '#ff0000'); // Bright red near tip
+                    spikeGradient.addColorStop(0.7, '#cc0000'); // Medium red 
+                    spikeGradient.addColorStop(1, '#800000');  // Dark red at base
                     
                     ctx.fillStyle = spikeGradient;
                     ctx.beginPath();
-                    ctx.moveTo(obstacle.x + i * spikeWidth, obstacle.y + obstacle.height);
-                    ctx.lineTo(obstacle.x + (i + 0.5) * spikeWidth, obstacle.y);
-                    ctx.lineTo(obstacle.x + (i + 1) * spikeWidth, obstacle.y + obstacle.height);
+                    ctx.moveTo(obstacle.points[0].x, obstacle.points[0].y);
+                    ctx.lineTo(obstacle.points[1].x, obstacle.points[1].y);
+                    ctx.lineTo(obstacle.points[2].x, obstacle.points[2].y);
                     ctx.closePath();
                     ctx.fill();
                     
@@ -57,18 +49,28 @@ function drawGame() {
                     ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
                     ctx.lineWidth = 1;
                     ctx.stroke();
+                    
+                    // Add a warning pattern at the base
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(
+                        obstacle.x, 
+                        obstacle.y + obstacle.height - 3, 
+                        obstacle.width, 
+                        3
+                    );
+                    
+                    // Add a slight glow for emphasis
+                    ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
+                    ctx.shadowBlur = 8;
+                    ctx.fillStyle = 'rgba(255, 0, 0, 0.03)';
+                    ctx.beginPath();
+                    ctx.moveTo(obstacle.points[0].x, obstacle.points[0].y);
+                    ctx.lineTo(obstacle.points[1].x, obstacle.points[1].y);
+                    ctx.lineTo(obstacle.points[2].x, obstacle.points[2].y);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
                 }
-                
-                // Add a warning pattern at the base
-                ctx.fillStyle = '#000';
-                ctx.fillRect(obstacle.x, obstacle.y + obstacle.height - 3, obstacle.width, 3);
-                
-                // Add a danger glow effect
-                ctx.shadowColor = 'rgba(255, 0, 0, 0.5)';
-                ctx.shadowBlur = 10;
-                ctx.fillStyle = 'rgba(255, 0, 0, 0.15)';
-                ctx.fillRect(obstacle.x - 5, obstacle.y - 5, obstacle.width + 10, obstacle.height + 10);
-                ctx.shadowBlur = 0;
                 break;
                 
             case 'teleporter':
@@ -129,6 +131,49 @@ function drawGame() {
                     ctx.lineWidth = 2;
                     ctx.stroke();
                 }
+                
+                // Draw a small indicator if this teleporter is in cooldown
+                if (obstacle.cooldown && obstacle.cooldown > 0) {
+                    const percentage = obstacle.cooldown / 60; // Assuming 60 is max cooldown
+                    
+                    // Draw cooldown indicator
+                    ctx.beginPath();
+                    ctx.arc(
+                        obstacle.x + obstacle.width/2,
+                        obstacle.y + obstacle.height/2,
+                        obstacle.width/2 * 0.4,
+                        -Math.PI/2,
+                        -Math.PI/2 + (1-percentage) * Math.PI * 2
+                    );
+                    ctx.lineTo(obstacle.x + obstacle.width/2, obstacle.y + obstacle.height/2);
+                    ctx.closePath();
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+                    ctx.fill();
+                }
+                
+                // If this is part of a pair, indicate the pair connection
+                if (obstacle.partner) {
+                    const color = obstacle.cooldown > 0 ? 'rgba(255, 255, 255, 0.3)' : 'rgba(255, 255, 255, 0.7)';
+                    
+                    // Draw a small line indicating the direction to the partner
+                    const angle = Math.atan2(
+                        obstacle.partner.y - obstacle.y,
+                        obstacle.partner.x - obstacle.x
+                    );
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        obstacle.x + obstacle.width/2,
+                        obstacle.y + obstacle.height/2
+                    );
+                    ctx.lineTo(
+                        obstacle.x + obstacle.width/2 + Math.cos(angle) * obstacle.width/2,
+                        obstacle.y + obstacle.height/2 + Math.sin(angle) * obstacle.height/2
+                    );
+                    ctx.strokeStyle = color;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
                 break;
                 
             case 'ice':
@@ -152,16 +197,21 @@ function drawGame() {
                 
                 // Add ice crystal patterns
                 const crystalCount = 5;
+                const iceTime = Date.now() / 5000; // Slow movement
+                
                 for (let i = 0; i < crystalCount; i++) {
-                    // Random positions for crystals
-                    const cx = obstacle.x + Math.random() * obstacle.width;
-                    const cy = obstacle.y + Math.random() * obstacle.height;
-                    const size = Math.random() * 10 + 5;
+                    // Semi-random positions for crystals that move slightly over time
+                    const seedX = (i * 7919) % 104729; // Use prime numbers for pseudo-randomness
+                    const seedY = (i * 7907) % 104723; 
+                    
+                    const cx = obstacle.x + ((seedX + Math.sin(iceTime + i) * 20) % obstacle.width);
+                    const cy = obstacle.y + ((seedY + Math.cos(iceTime + i) * 20) % obstacle.height);
+                    const size = 5 + i % 5;
                     
                     // Draw crystal star shape
                     ctx.beginPath();
                     for (let j = 0; j < 6; j++) {
-                        const angle = j * Math.PI / 3;
+                        const angle = j * Math.PI / 3 + iceTime;
                         const x1 = cx + Math.cos(angle) * size;
                         const y1 = cy + Math.sin(angle) * size;
                         if (j === 0) {
@@ -199,7 +249,8 @@ function drawGame() {
                 
                 // Draw with rounded ends for smoother appearance
                 ctx.beginPath();
-                ctx.roundRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height, 5);
+                const cornerRadius = 5;
+                ctx.roundRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height, cornerRadius);
                 ctx.fill();
                 
                 // Add direction indicator with animated trail
@@ -265,6 +316,9 @@ function drawGame() {
                 ctx.strokeRect(obstacle.x, obstacle.y, obstacle.width, obstacle.height);
         }
     }
+    
+    // Draw explosion effects
+    drawExplosionEffects();
     
     // Draw exit with enhanced visibility and effects
     // First draw an animated outer glow
