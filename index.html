@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Accelerometer Maze Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        #gameCanvas {
+            background-color: #111;
+            border: 2px solid #333;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        #startScreen {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 10;
+        }
+        #startButton {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #levelInfo {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+        }
+        #timeInfo {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="levelInfo">Level: 1</div>
+        <div id="timeInfo">Time: 0s</div>
+        <div id="startScreen">
+            <h1>Gravity Maze</h1>
+            <p>Tilt your device to move the ball through the maze.</p>
+            <p>You can also use touch to control the ball.</p>
+            <p>Reach the green exit to win!</p>
+            <button id="startButton">Start Game</button>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const levelInfo = document.getElementById('levelInfo');
+        const timeInfo = document.getElementById('timeInfo');
+        
+        let gameRunning = false;
+        let gameTime = 0;
+        let timeInterval;
+        let currentLevel = 1;
+        let ball;
+        let maze;
+        let exit;
+        
+        // Set canvas dimensions to match the viewport
+        function resizeCanvas() {
+            // Make canvas slightly smaller than viewport to ensure it fits
+            canvas.width = window.innerWidth * 0.95;
+            canvas.height = window.innerHeight * 0.95;
+            
+            // If game is already initialized, recreate the maze
+            if (gameRunning) {
+                createMaze();
+                resetBall();
+            }
+        }
+        
+        // Initialize the game
+        function initGame() {
+            startScreen.style.display = 'none';
+            gameRunning = true;
+            gameTime = 0;
+            
+            // Set up the game timer
+            timeInterval = setInterval(() => {
+                gameTime++;
+                timeInfo.textContent = `Time: ${gameTime}s`;
+            }, 1000);
+            
+            // Create the maze and ball
+            createMaze();
+            resetBall();
+            
+            // Start the game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Reset ball position
+        function resetBall() {
+            // Ball properties
+            const ballRadius = Math.min(canvas.width, canvas.height) * 0.025;
+            ball = {
+                x: canvas.width * 0.5,
+                y: ballRadius * 2,
+                radius: ballRadius,
+                vx: 0,
+                vy: 0,
+                color: '#ff4444'
+            };
+        }
+        
+        // Create maze with walls
+        function createMaze() {
+            maze = {
+                walls: [],
+                wallWidth: Math.min(canvas.width, canvas.height) * 0.025
+            };
+            
+            // Clear existing walls
+            maze.walls = [];
+            
+            // Create a more complex maze based on level
+            const complexity = currentLevel * 2;
+            const numHorizontalWalls = 3 + currentLevel;
+            const numVerticalWalls = 2 + currentLevel;
+            
+            // Create horizontal walls with gaps
+            for (let i = 1; i <= numHorizontalWalls; i++) {
+                const y = (canvas.height / (numHorizontalWalls + 1)) * i;
+                const gap = Math.random() * 0.6 + 0.2; // Gap position (20-80% of width)
+                const gapWidth = (0.2 - currentLevel * 0.01) * canvas.width; // Gap width gets smaller with level
+                
+                // Wall before gap
+                maze.walls.push({
+                    x: 0,
+                    y: y,
+                    width: canvas.width * gap - gapWidth / 2,
+                    height: maze.wallWidth,
+                    color: '#aaaaaa'
+                });
+                
+                // Wall after gap
+                maze.walls.push({
+                    x: canvas.width * gap + gapWidth / 2,
+                    y: y,
+                    width: canvas.width - (canvas.width * gap + gapWidth / 2),
+                    height: maze.wallWidth,
+                    color: '#aaaaaa'
+                });
+            }
+            
+            // Add some vertical walls
+            for (let i = 0; i < numVerticalWalls; i++) {
+                const x = (canvas.width / (numVerticalWalls + 1)) * (i + 1);
+                const gap = Math.random() * 0.6 + 0.2; // Gap position (20-80% of height)
+                const gapHeight = (0.2 - currentLevel * 0.01) * canvas.height; // Gap height gets smaller with level
+                
+                // Wall before gap
+                maze.walls.push({
+                    x: x,
+                    y: 0,
+                    width: maze.wallWidth,
+                    height: canvas.height * gap - gapHeight / 2,
+                    color: '#aaaaaa'
+                });
+                
+                // Wall after gap
+                maze.walls.push({
+                    x: x,
+                    y: canvas.height * gap + gapHeight / 2,
+                    width: maze.wallWidth,
+                    height: canvas.height - (canvas.height * gap + gapHeight / 2),
+                    color: '#aaaaaa'
+                });
+            }
+            
+            // Create exit
+            exit = {
+                x: canvas.width * 0.5,
+                y: canvas.height - maze.wallWidth * 2,
+                width: maze.wallWidth * 3,
+                height: maze.wallWidth * 2,
+                color: '#44ff44'
+            };
+        }
+        
+        // Game loop
+        function gameLoop() {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update ball position based on acceleration
+            updateBall();
+            
+            // Check for collisions
+            checkCollisions();
+            
+            // Draw everything
+            drawGame();
+            
+            // Check for exit
+            if (ball.x > exit.x && 
+                ball.x < exit.x + exit.width && 
+                ball.y > exit.y && 
+                ball.y < exit.y + exit.height) {
+                levelComplete();
+            }
+            
+            // Continue the game loop
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Update ball position
+        function updateBall() {
+            // Apply acceleration (with a maximum velocity)
+            const maxVelocity = 10;
+            ball.vx = Math.min(Math.max(ball.vx, -maxVelocity), maxVelocity);
+            ball.vy = Math.min(Math.max(ball.vy, -maxVelocity), maxVelocity);
+            
+            // Apply damping (friction)
+            ball.vx *= 0.98;
+            ball.vy *= 0.98;
+            
+            // Update position
+            ball.x += ball.vx;
+            ball.y += ball.vy;
+            
+            // Check boundaries
+            if (ball.x - ball.radius < 0) {
+                ball.x = ball.radius;
+                ball.vx = -ball.vx * 0.5; // Bounce with energy loss
+            }
+            if (ball.x + ball.radius > canvas.width) {
+                ball.x = canvas.width - ball.radius;
+                ball.vx = -ball.vx * 0.5;
+            }
+            if (ball.y - ball.radius < 0) {
+                ball.y = ball.radius;
+                ball.vy = -ball.vy * 0.5;
+            }
+            if (ball.y + ball.radius > canvas.height) {
+                ball.y = canvas.height - ball.radius;
+                ball.vy = -ball.vy * 0.5;
+            }
+        }
+        
+        // Check for collisions with walls
+        function checkCollisions() {
+            for (const wall of maze.walls) {
+                // Convert the ball to a rectangle for easier collision detection
+                const ballRect = {
+                    x: ball.x - ball.radius,
+                    y: ball.y - ball.radius,
+                    width: ball.radius * 2,
+                    height: ball.radius * 2
+                };
+                
+                // Check for collision
+                if (rectIntersect(ballRect, wall)) {
+                    // Calculate collision response
+                    const ballCenter = { x: ball.x, y: ball.y };
+                    const wallCenter = { 
+                        x: wall.x + wall.width / 2, 
+                        y: wall.y + wall.height / 2 
+                    };
+                    
+                    // Determine if horizontal or vertical collision is more likely
+                    if (wall.width > wall.height) {
+                        // Horizontal wall - bounce vertically
+                        ball.vy = -ball.vy * 0.5;
+                        
+                        // Adjust position to prevent sticking
+                        if (ball.y < wallCenter.y) {
+                            ball.y = wall.y - ball.radius;
+                        } else {
+                            ball.y = wall.y + wall.height + ball.radius;
+                        }
+                    } else {
+                        // Vertical wall - bounce horizontally
+                        ball.vx = -ball.vx * 0.5;
+                        
+                        // Adjust position to prevent sticking
+                        if (ball.x < wallCenter.x) {
+                            ball.x = wall.x - ball.radius;
+                        } else {
+                            ball.x = wall.x + wall.width + ball.radius;
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Check if two rectangles intersect
+        function rectIntersect(a, b) {
+            return (
+                a.x < b.x + b.width &&
+                a.x + a.width > b.x &&
+                a.y < b.y + b.height &&
+                a.y + a.height > b.y
+            );
+        }
+        
+        // Draw all game elements
+        function drawGame() {
+            // Draw exit
+            ctx.fillStyle = exit.color;
+            ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+            
+            // Draw maze walls
+            for (const wall of maze.walls) {
+                ctx.fillStyle = wall.color;
+                ctx.fillRect(wall.x, wall.y, wall.width, wall.height);
+            }
+            
+            // Draw ball
+            ctx.fillStyle = ball.color;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Add a shine effect to the ball
+            const gradient = ctx.createRadialGradient(
+                ball.x - ball.radius * 0.3, 
+                ball.y - ball.radius * 0.3, 
+                0,
+                ball.x, 
+                ball.y, 
+                ball.radius
+            );
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+            gradient.addColorStop(0.2, 'rgba(255, 255, 255, 0.2)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Level complete
+        function levelComplete() {
+            currentLevel++;
+            levelInfo.textContent = `Level: ${currentLevel}`;
+            createMaze();
+            resetBall();
+        }
+        
+        // Handle device motion
+        function handleDeviceMotion(event) {
+            if (!gameRunning) return;
+            
+            // Get acceleration including gravity
+            const acceleration = event.accelerationIncludingGravity;
+            
+            // Check if acceleration data is available
+            if (acceleration) {
+                // Apply acceleration to ball velocity
+                // Note: we invert the acceleration for intuitive control
+                ball.vx += acceleration.x * -0.3;
+                ball.vy += acceleration.y * 0.3;
+            } else {
+                // Fallback for devices without accelerometer or when data isn't available
+                // We'll use keyboard arrows for testing
+                document.addEventListener('keydown', (e) => {
+                    const key = e.key;
+                    const force = 2;
+                    
+                    if (key === 'ArrowLeft') ball.vx -= force;
+                    if (key === 'ArrowRight') ball.vx += force;
+                    if (key === 'ArrowUp') ball.vy -= force;
+                    if (key === 'ArrowDown') ball.vy += force;
+                });
+            }
+        }
+        
+        // Add touch control fallback for devices without accelerometer
+        function initTouchControls() {
+            // Track touch movement
+            let lastTouchX = 0;
+            let lastTouchY = 0;
+            
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+            });
+            
+            canvas.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (!gameRunning) return;
+                
+                const touch = e.touches[0];
+                const deltaX = touch.clientX - lastTouchX;
+                const deltaY = touch.clientY - lastTouchY;
+                
+                // Apply force based on touch movement
+                ball.vx += deltaX * 0.2;
+                ball.vy += deltaY * 0.2;
+                
+                lastTouchX = touch.clientX;
+                lastTouchY = touch.clientY;
+            });
+        }
+        
+        // Initialize the game when the start button is clicked
+        startButton.addEventListener('click', () => {
+            try {
+                // Request permission for motion sensors (needed for iOS 13+)
+                if (typeof DeviceMotionEvent !== 'undefined' && 
+                    typeof DeviceMotionEvent.requestPermission === 'function') {
+                    DeviceMotionEvent.requestPermission()
+                        .then(permissionState => {
+                            if (permissionState === 'granted') {
+                                window.addEventListener('devicemotion', handleDeviceMotion);
+                                initGame();
+                            } else {
+                                alert('Permission to access motion sensors was denied');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error requesting motion permission:', error);
+                            // Fallback for when permission request fails
+                            window.addEventListener('devicemotion', handleDeviceMotion);
+                            initGame();
+                        });
+                } else {
+                    // For devices that don't require permission
+                    window.addEventListener('devicemotion', handleDeviceMotion);
+                    initGame();
+                }
+            } catch (error) {
+                console.error('Error initializing motion sensors:', error);
+                // Fallback if there's any error in the try block
+                window.addEventListener('devicemotion', handleDeviceMotion);
+                initGame();
+            }
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Initial canvas setup
+        resizeCanvas();
+        
+        // Initialize touch controls as fallback
+        initTouchControls();
+    </script>
+</body>
+</html>
