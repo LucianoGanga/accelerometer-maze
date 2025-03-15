@@ -1,6 +1,6 @@
 // Device motion and touch controls
 
-// Handle device motion with CORRECT tilt directions
+// Handle device motion with CORRECT tilt directions and proper acceleration
 function handleDeviceMotion(event) {
     if (!gameRunning) return;
     
@@ -9,17 +9,19 @@ function handleDeviceMotion(event) {
     
     // Check if acceleration data is available
     if (acceleration) {
-        // CORRECTED TILT DIRECTIONS:
-        // This is the correct approach for natural tilting:
-        // When you tilt right (positive X), ball should move right (positive vx)
-        // When you tilt left (negative X), ball should move left (negative vx)
-        // When you tilt forward (negative Y), ball should move forward/down (positive vy)
-        // When you tilt back (positive Y), ball should move back/up (negative vy)
+        // CORRECTED TILT DIRECTIONS with acceleration:
+        // When you tilt right (positive X), ball should accelerate right
+        // When you tilt forward (negative Y), ball should accelerate down
         
-        // With accelerometer, X is already correct (tilt right = positive X)
-        // But Y needs to be inverted (tilt forward = negative Y, but we want positive vy)
-        ball.vx = acceleration.x * 0.3;   // Direct mapping (no += to avoid accumulation)
-        ball.vy = -acceleration.y * 0.3;  // Invert Y axis
+        // Add to velocity (accumulates over time like real physics)
+        // But use the correct signs for intuitive movement
+        ball.vx += acceleration.x * 0.2;  // Accelerate in X direction
+        ball.vy -= acceleration.y * 0.2;  // Invert Y and accelerate
+        
+        // Apply a maximum velocity cap if needed
+        const maxVelocity = 15;
+        ball.vx = Math.min(Math.max(ball.vx, -maxVelocity), maxVelocity);
+        ball.vy = Math.min(Math.max(ball.vy, -maxVelocity), maxVelocity);
         
         // Display debug info if enabled
         if (window.debugMode) {
