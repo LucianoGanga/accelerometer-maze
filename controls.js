@@ -1,6 +1,6 @@
 // Device motion and touch controls
 
-// Handle device motion - with Safari iOS fix
+// Handle device motion with comprehensive fixes for different platforms
 function handleDeviceMotion(event) {
     if (!gameRunning) return;
     
@@ -9,25 +9,107 @@ function handleDeviceMotion(event) {
     
     // Check if acceleration data is available
     if (acceleration) {
-        // Apply acceleration to ball velocity
-        // Safari on iOS might use different coordinate system
-        let accX = acceleration.x;
-        let accY = acceleration.y;
-        
-        // Detect iOS Safari
+        // Detect device and browser
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
         const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+        const isAndroid = /Android/.test(navigator.userAgent);
         
-        // FIXED: Invert X for all devices for more intuitive control
-        // FIXED: For iOS Safari, invert Y (since Safari already inverts it compared to other browsers)
+        // Apply platform-specific acceleration mappings
         if (isIOS && isSafari) {
-            ball.vx += accX * -0.3;  // Invert X for better control
-            ball.vy += accY * -0.3;  // Invert Y for iOS Safari
+            // iOS Safari specific handling
+            // Try flipping both directions
+            ball.vx -= acceleration.x * 0.3;
+            ball.vy += acceleration.y * 0.3;
+            
+            // Add debug info if in debug mode
+            if (window.debugMode) {
+                console.log("iOS Safari acceleration:", acceleration.x, acceleration.y);
+            }
+        } else if (isIOS) {
+            // Other iOS browsers
+            ball.vx -= acceleration.x * 0.3;
+            ball.vy -= acceleration.y * 0.3;
+        } else if (isAndroid) {
+            // Android specific
+            ball.vx -= acceleration.x * 0.3;
+            ball.vy += acceleration.y * 0.3;
         } else {
-            ball.vx += accX * -0.3;  // Invert X for better control
-            ball.vy += accY * 0.3;   // Normal Y for other browsers
+            // Default for other devices
+            ball.vx -= acceleration.x * 0.3;
+            ball.vy -= acceleration.y * 0.3;
         }
     }
+}
+
+// Toggle debug mode for acceleration values
+function toggleDebugMode() {
+    window.debugMode = !window.debugMode;
+    const debugInfo = document.createElement('div');
+    debugInfo.id = 'debug-info';
+    debugInfo.style.position = 'absolute';
+    debugInfo.style.bottom = '10px';
+    debugInfo.style.left = '10px';
+    debugInfo.style.color = 'white';
+    debugInfo.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    debugInfo.style.padding = '5px';
+    document.body.appendChild(debugInfo);
+    
+    // Update debug info
+    window.addEventListener('devicemotion', (event) => {
+        if (!window.debugMode) return;
+        
+        const acceleration = event.accelerationIncludingGravity;
+        if (acceleration) {
+            const debugEl = document.getElementById('debug-info');
+            if (debugEl) {
+                debugEl.innerHTML = `AccX: ${acceleration.x.toFixed(2)}<br>AccY: ${acceleration.y.toFixed(2)}<br>AccZ: ${acceleration.z.toFixed(2)}`;
+            }
+        }
+    });
+}
+
+// Add orientation change listener to recalibrate
+window.addEventListener('orientationchange', () => {
+    // Give time for orientation to stabilize
+    setTimeout(() => {
+        // Reset ball position but maintain game state
+        if (gameRunning) {
+            ball.vx = 0;
+            ball.vy = 0;
+        }
+    }, 300);
+});
+
+// Add manual control mode
+let useManualControls = false;
+function toggleControlMode() {
+    useManualControls = !useManualControls;
+    
+    if (useManualControls) {
+        window.removeEventListener('devicemotion', handleDeviceMotion);
+        alert('Switched to manual controls. Use touch to move the ball.');
+    } else {
+        window.addEventListener('devicemotion', handleDeviceMotion);
+        alert('Switched to accelerometer controls.');
+    }
+}
+
+// Add a control mode toggle button
+function addControlModeButton() {
+    const controlButton = document.createElement('button');
+    controlButton.innerText = '🕹️ Controls';
+    controlButton.style.position = 'absolute';
+    controlButton.style.bottom = '10px';
+    controlButton.style.right = '10px';
+    controlButton.style.padding = '8px 12px';
+    controlButton.style.backgroundColor = 'rgba(0,0,0,0.5)';
+    controlButton.style.color = 'white';
+    controlButton.style.border = 'none';
+    controlButton.style.borderRadius = '4px';
+    controlButton.style.zIndex = '100';
+    
+    controlButton.addEventListener('click', toggleControlMode);
+    document.body.appendChild(controlButton);
 }
 
 // Add touch control fallback
@@ -52,8 +134,15 @@ function initTouchControls() {
         const deltaY = touch.clientY - lastTouchY;
         
         // Apply force based on touch movement
-        ball.vx += deltaX * 0.2;
-        ball.vy += deltaY * 0.2;
+        if (useManualControls || !window.DeviceMotionEvent) {
+            // More responsive touch when in manual mode
+            ball.vx += deltaX * 0.3;
+            ball.vy += deltaY * 0.3;
+        } else {
+            // Normal touch sensitivity when accelerometer is primary
+            ball.vx += deltaX * 0.1;
+            ball.vy += deltaY * 0.1;
+        }
         
         lastTouchX = touch.clientX;
         lastTouchY = touch.clientY;
@@ -72,6 +161,11 @@ function initKeyboardControls() {
         if (key === 'ArrowRight') ball.vx += force;
         if (key === 'ArrowUp') ball.vy -= force;
         if (key === 'ArrowDown') ball.vy += force;
+        
+        // Debug mode toggle
+        if (key === 'd') {
+            toggleDebugMode();
+        }
     });
 }
 
@@ -106,13 +200,14 @@ function initMotionSensors() {
                             resolve(true);
                         } else {
                             alert('Permission to access motion sensors was denied. You can still use touch controls.');
+                            useManualControls = true;
                             resolve(false);
                         }
                     })
                     .catch(error => {
                         console.error('Error requesting motion permission:', error);
                         // Fallback for when permission request fails
-                        window.addEventListener('devicemotion', handleDeviceMotion);
+                        useManualControls = true;
                         resolve(false);
                     });
             } else {
@@ -123,8 +218,19 @@ function initMotionSensors() {
         } catch (error) {
             console.error('Error initializing motion sensors:', error);
             // Fallback if there's any error in the try block
-            window.addEventListener('devicemotion', handleDeviceMotion);
+            useManualControls = true;
             resolve(false);
         }
     });
+}
+
+// Initialize all controls
+function initControls() {
+    initTouchControls();
+    initKeyboardControls();
+    initFullscreenButton();
+    addControlModeButton();
+    
+    // Initialize debug mode
+    window.debugMode = false;
 }
