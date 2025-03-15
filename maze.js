@@ -1,9 +1,140 @@
-// Maze generation and management
+// Maze generation and management with consistent level designs
 let maze;
 let exit;
 
+// Pseudo-random number generator with seed for consistent levels
+class SeededRandom {
+    constructor(seed) {
+        this.seed = seed;
+    }
+    
+    // Simple random number generator that uses a seed
+    random() {
+        const x = Math.sin(this.seed++) * 10000;
+        return x - Math.floor(x);
+    }
+    
+    // Get random number in range [min, max)
+    range(min, max) {
+        return min + this.random() * (max - min);
+    }
+    
+    // Get random integer in range [min, max)
+    rangeInt(min, max) {
+        return Math.floor(this.range(min, max));
+    }
+    
+    // Shuffle array deterministically
+    shuffle(array) {
+        const result = [...array];
+        for (let i = result.length - 1; i > 0; i--) {
+            const j = Math.floor(this.random() * (i + 1));
+            [result[i], result[j]] = [result[j], result[i]];
+        }
+        return result;
+    }
+}
+
+// Level configurations - predefined parameters for each level
+const levelConfigs = [
+    // Level 1 - Simple intro level, no obstacles
+    {
+        gridSize: 4,
+        extraConnections: 0,
+        obstacleCount: 0,
+        obstacleTypes: [],
+        exitWidth: 0.15,
+        seed: 12345
+    },
+    // Level 2 - Introduce spikes
+    {
+        gridSize: 5,
+        extraConnections: 1,
+        obstacleCount: 3,
+        obstacleTypes: ['spike'],
+        exitWidth: 0.14,
+        seed: 23456
+    },
+    // Level 3 - Introduce moving obstacles
+    {
+        gridSize: 5,
+        extraConnections: 2,
+        obstacleCount: 5,
+        obstacleTypes: ['spike', 'moving'],
+        exitWidth: 0.13,
+        seed: 34567
+    },
+    // Level 4 - Introduce ice patches
+    {
+        gridSize: 6,
+        extraConnections: 3,
+        obstacleCount: 7,
+        obstacleTypes: ['spike', 'moving', 'ice'],
+        exitWidth: 0.12,
+        seed: 45678
+    },
+    // Level 5 - Introduce teleporters
+    {
+        gridSize: 6,
+        extraConnections: 4,
+        obstacleCount: 9,
+        obstacleTypes: ['spike', 'moving', 'ice', 'teleporter'],
+        exitWidth: 0.11,
+        seed: 56789
+    },
+    // Level 6 - Getting harder
+    {
+        gridSize: 7,
+        extraConnections: 4,
+        obstacleCount: 12,
+        obstacleTypes: ['spike', 'moving', 'ice', 'teleporter'],
+        exitWidth: 0.10,
+        seed: 67890
+    },
+    // Level 7 - More complex
+    {
+        gridSize: 7,
+        extraConnections: 5,
+        obstacleCount: 15,
+        obstacleTypes: ['spike', 'moving', 'ice', 'teleporter'],
+        exitWidth: 0.09,
+        seed: 78901
+    },
+    // Level 8 - Even harder
+    {
+        gridSize: 8,
+        extraConnections: 6,
+        obstacleCount: 18,
+        obstacleTypes: ['spike', 'moving', 'ice', 'teleporter'],
+        exitWidth: 0.08,
+        seed: 89012
+    },
+    // Level 9+ - Maximum difficulty
+    {
+        gridSize: 8,
+        extraConnections: 7,
+        obstacleCount: 20,
+        obstacleTypes: ['spike', 'moving', 'ice', 'teleporter'],
+        exitWidth: 0.07,
+        seed: 90123
+    }
+];
+
+// Get configuration for current level
+function getLevelConfig() {
+    // Use the last config for any level beyond our defined levels
+    const index = Math.min(currentLevel - 1, levelConfigs.length - 1);
+    return levelConfigs[index];
+}
+
 // Create maze with walls - proper single entry/exit path
 function createMaze() {
+    // Get configuration for current level
+    const config = getLevelConfig();
+    
+    // Create seeded random generator for consistent levels
+    const random = new SeededRandom(config.seed + currentLevel);
+    
     maze = {
         walls: [],
         wallWidth: Math.min(canvas.width, canvas.height) * 0.025
@@ -35,8 +166,8 @@ function createMaze() {
     });
     
     // Create bottom wall with exit point (will be replaced by exit object)
-    // Make exit wider and more visible
-    const exitWidth = Math.max(maze.wallWidth * 4, canvas.width * 0.15);
+    // Make exit width based on level config
+    const exitWidth = Math.max(maze.wallWidth * 3, canvas.width * config.exitWidth);
     const exitX = canvas.width / 2 - exitWidth / 2;
     
     maze.walls.push({
@@ -72,11 +203,9 @@ function createMaze() {
         color: '#aaaaaa'
     });
     
-    // Create internal maze structure based on level
-    // Increase complexity with level
-    const complexity = Math.min(8, Math.floor(2 + currentLevel * 0.5)); // Limit complexity but increase with level
-    const rows = complexity;
-    const cols = complexity;
+    // Create internal maze structure based on level config
+    const rows = config.gridSize;
+    const cols = config.gridSize;
     
     // Create a grid-based maze
     const cellWidth = (canvas.width - 2 * maze.wallWidth) / cols;
@@ -99,15 +228,15 @@ function createMaze() {
         }
     }
     
-    // Create a path through the maze
+    // Create a path through the maze with a seeded random for consistent results
     function carvePathFrom(r, c) {
         grid[r][c].visited = true;
         
-        // Random order to check neighbors
+        // Random order to check neighbors using our seeded random
         const directions = ["top", "right", "bottom", "left"];
-        shuffleArray(directions);
+        const shuffledDirections = random.shuffle(directions);
         
-        for (const direction of directions) {
+        for (const direction of shuffledDirections) {
             let nr = r, nc = c;
             
             if (direction === "top") nr--;
@@ -139,8 +268,8 @@ function createMaze() {
     }
     
     // Ensure there's a clear path from top to bottom
-    // Start at a random column in the top row
-    const startCol = Math.floor(cols / 2); // Start in the middle to align with entry
+    // Start at middle column in the top row for consistency
+    const startCol = Math.floor(cols / 2);
     carvePathFrom(0, startCol);
     
     // Now ensure there's a path to the bottom
@@ -152,20 +281,19 @@ function createMaze() {
         }
     }
     
-    // If no connection to bottom, create one
+    // If no connection to bottom, create one at the middle
     if (!bottomRowConnected) {
-        const endCol = Math.floor(cols / 2); // End in the middle to align with exit
+        const endCol = Math.floor(cols / 2);
         grid[rows-1][endCol].walls.bottom = false;
     }
     
-    // Add additional connections to make the maze more complex at higher levels
-    // The higher the level, the more connections we add
-    const additionalConnectionsCount = Math.floor(currentLevel * 0.7);
-    for (let i = 0; i < additionalConnectionsCount; i++) {
-        const r = Math.floor(Math.random() * rows);
-        const c = Math.floor(Math.random() * cols);
+    // Add additional connections based on level config for extra complexity
+    // Use our seeded random for consistent placement
+    for (let i = 0; i < config.extraConnections; i++) {
+        const r = random.rangeInt(0, rows);
+        const c = random.rangeInt(0, cols);
         const directions = ["top", "right", "bottom", "left"];
-        const direction = directions[Math.floor(Math.random() * directions.length)];
+        const direction = directions[random.rangeInt(0, directions.length)];
         
         let nr = r, nc = c;
         if (direction === "top") nr--;
@@ -249,31 +377,42 @@ function createMaze() {
         color: '#00ff00' // Brighter green
     };
     
-    // Add obstacles based on level
-    addObstacles(currentLevel, cellWidth, cellHeight);
+    // Add obstacles based on level config
+    addObstacles(config, random, cellWidth, cellHeight);
     
-    // Clear any obstacles near the exit to ensure it's accessible
-    clearExitArea();
+    // Clear any obstacles near the exit and entrance to ensure accessibility
+    clearSafeZones();
 }
 
-// Clear area around exit to ensure it's accessible
-function clearExitArea() {
-    const exitBuffer = 30;
+// Clear areas around exit and entrance to ensure they're accessible
+function clearSafeZones() {
+    // Entry safe zone
+    const entrySafeZone = {
+        x: canvas.width / 2 - canvas.width * 0.15,
+        y: 0,
+        width: canvas.width * 0.3,
+        height: canvas.height * 0.15
+    };
+    
+    // Exit safe zone
+    const exitSafeZone = {
+        x: exit.x - 30,
+        y: exit.y - 30,
+        width: exit.width + 60,
+        height: exit.height + 60
+    };
+    
+    // Remove obstacles in safe zones
     obstacles = obstacles.filter(obstacle => {
-        return !(obstacle.x < exit.x + exit.width + exitBuffer &&
-               obstacle.x + obstacle.width > exit.x - exitBuffer &&
-               obstacle.y < exit.y + exit.height + exitBuffer &&
-               obstacle.y + obstacle.height > exit.y - exitBuffer);
+        // Check if obstacle overlaps with entry safe zone
+        const inEntrySafeZone = rectIntersect(obstacle, entrySafeZone);
+        
+        // Check if obstacle overlaps with exit safe zone
+        const inExitSafeZone = rectIntersect(obstacle, exitSafeZone);
+        
+        // Keep obstacle only if it's not in either safe zone
+        return !(inEntrySafeZone || inExitSafeZone);
     });
-}
-
-// Helper function to shuffle array
-function shuffleArray(array) {
-    for (let i = array.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [array[i], array[j]] = [array[j], array[i]];
-    }
-    return array;
 }
 
 // Check if two rectangles intersect
