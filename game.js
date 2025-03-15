@@ -28,6 +28,9 @@ function initGame() {
     gameRunning = true;
     gameTime = 0;
     
+    // Initialize audio
+    initAudio();
+    
     // Set up the game timer
     timeInterval = setInterval(() => {
         gameTime++;
@@ -67,12 +70,6 @@ function gameLoop() {
     if (gameRunning) {
         requestAnimationFrame(gameLoop);
     }
-}
-
-// Level complete handler
-function levelComplete() {
-    gameRunning = false;
-    showLevelComplete();
 }
 
 // Initialize the game when the start button is clicked
