@@ -24,12 +24,15 @@ class SeededRandom {
         return Math.floor(this.range(min, max));
     }
     
-    // Shuffle array deterministically
+    // Shuffle array deterministically - fixed to use iterative approach
     shuffle(array) {
         const result = [...array];
         for (let i = result.length - 1; i > 0; i--) {
             const j = Math.floor(this.random() * (i + 1));
-            [result[i], result[j]] = [result[j], result[i]];
+            // Swap elements directly
+            const temp = result[i];
+            result[i] = result[j];
+            result[j] = temp;
         }
         return result;
     }
@@ -230,7 +233,7 @@ function createMazeWithSeed(random, config) {
     maze.cellWidth = (canvas.width - 2 * maze.wallWidth) / cols;
     maze.cellHeight = (canvas.height - 2 * maze.wallWidth) / rows;
     
-    // Generate maze using a simplified recursive backtracking algorithm
+    // Generate maze using a simplified iterative approach
     const grid = [];
     for (let r = 0; r < rows; r++) {
         grid[r] = [];
@@ -247,16 +250,26 @@ function createMazeWithSeed(random, config) {
         }
     }
     
-    // Create a path through the maze with a seeded random for consistent results
-    function carvePathFrom(r, c) {
-        grid[r][c].visited = true;
+    // Start at middle column in the top row for consistency
+    const startCol = Math.floor(cols / 2);
+    
+    // Use iterative approach instead of recursive carvePathFrom
+    // This part replaces the old recursive carvePathFrom function
+    const stack = [{r: 0, c: startCol}];
+    
+    while (stack.length > 0) {
+        const current = stack[stack.length - 1];
+        grid[current.r][current.c].visited = true;
         
-        // Random order to check neighbors using our seeded random
+        // Get unvisited neighbors
+        const unvisitedNeighbors = [];
+        
+        // Check all four directions
         const directions = ["top", "right", "bottom", "left"];
         const shuffledDirections = random.shuffle(directions);
         
         for (const direction of shuffledDirections) {
-            let nr = r, nc = c;
+            let nr = current.r, nc = current.c;
             
             if (direction === "top") nr--;
             else if (direction === "right") nc++;
@@ -265,31 +278,37 @@ function createMazeWithSeed(random, config) {
             
             // Check if neighbor is valid and not visited
             if (nr >= 0 && nr < rows && nc >= 0 && nc < cols && !grid[nr][nc].visited) {
-                // Remove walls between current cell and neighbor
-                if (direction === "top") {
-                    grid[r][c].walls.top = false;
-                    grid[nr][nc].walls.bottom = false;
-                } else if (direction === "right") {
-                    grid[r][c].walls.right = false;
-                    grid[nr][nc].walls.left = false;
-                } else if (direction === "bottom") {
-                    grid[r][c].walls.bottom = false;
-                    grid[nr][nc].walls.top = false;
-                } else if (direction === "left") {
-                    grid[r][c].walls.left = false;
-                    grid[nr][nc].walls.right = false;
-                }
-                
-                // Continue carving path from neighbor
-                carvePathFrom(nr, nc);
+                unvisitedNeighbors.push({nr, nc, direction});
             }
         }
+        
+        if (unvisitedNeighbors.length > 0) {
+            // Randomly choose a neighbor
+            const randomIndex = Math.floor(random.random() * unvisitedNeighbors.length);
+            const {nr, nc, direction} = unvisitedNeighbors[randomIndex];
+            
+            // Remove walls between current cell and chosen neighbor
+            if (direction === "top") {
+                grid[current.r][current.c].walls.top = false;
+                grid[nr][nc].walls.bottom = false;
+            } else if (direction === "right") {
+                grid[current.r][current.c].walls.right = false;
+                grid[nr][nc].walls.left = false;
+            } else if (direction === "bottom") {
+                grid[current.r][current.c].walls.bottom = false;
+                grid[nr][nc].walls.top = false;
+            } else if (direction === "left") {
+                grid[current.r][current.c].walls.left = false;
+                grid[nr][nc].walls.right = false;
+            }
+            
+            // Push the neighbor to the stack
+            stack.push({r: nr, c: nc});
+        } else {
+            // Backtrack
+            stack.pop();
+        }
     }
-    
-    // Ensure there's a clear path from top to bottom
-    // Start at middle column in the top row for consistency
-    const startCol = Math.floor(cols / 2);
-    carvePathFrom(0, startCol);
     
     // Now ensure there's a path to the bottom
     let bottomRowConnected = false;
@@ -397,7 +416,7 @@ function createMazeWithSeed(random, config) {
     };
 }
 
-// Validate that the exit is not blocked by any walls
+// Fixed validateMazeExit function to prevent infinite recursion
 function validateMazeExit() {
     // Find all walls that could potentially block the exit
     const exitBlockers = maze.walls.filter(wall => {
@@ -427,15 +446,30 @@ function validateMazeExit() {
         // Recreate the maze with the new seed
         createMazeWithSeed(newRandom, config);
         
-        // Validate again (recursive check)
-        validateMazeExit();
+        // Limit recursive validation to avoid stack overflow
+        // Instead of recursively calling, we'll just check once more and exit if still invalid
+        const stillBlocked = maze.walls.some(wall => (
+            wall.y < exit.y + exit.height &&
+            wall.y + wall.height > exit.y &&
+            wall.x < exit.x + exit.width &&
+            wall.x + wall.width > exit.x
+        ));
+        
+        if (!stillBlocked) {
+            // Now verify that there is a valid path from start to exit, but only if exit is not blocked
+            verifyPathToExit();
+        } else {
+            // If still blocked, just modify the exit position slightly instead of recursive regeneration
+            exit.y -= maze.wallWidth;
+            console.log("Exit still blocked, adjusting exit position");
+        }
+    } else {
+        // Now verify that there is a valid path from start to exit
+        verifyPathToExit();
     }
-    
-    // Now verify that there is a valid path from start to exit
-    verifyPathToExit();
 }
 
-// Use a simple flood fill algorithm to verify there's a path from start to exit
+// Fixed verifyPathToExit to prevent infinite recursion
 function verifyPathToExit() {
     // Create a grid of cells to track what's been visited
     const cellSize = maze.wallWidth;
@@ -508,26 +542,87 @@ function verifyPathToExit() {
         }
     }
     
-    // If no path is found, regenerate the maze
+    // If no path is found, create a direct path instead of recursively regenerating
     if (!pathFound) {
-        console.log("No valid path to exit found. Regenerating maze...");
-        // Use a different seed for regeneration
-        const config = getLevelConfig();
-        const newSeed = config.seed + 200 + currentLevel;
+        console.log("No valid path to exit found. Creating a simple path...");
         
-        // Create a new random generator with the modified seed
-        const newRandom = new SeededRandom(newSeed);
+        // Instead of regenerating the entire maze, create a direct path to exit
+        const startX = canvas.width / 2;
+        const startY = ball.radius * 2;
+        const endX = exit.x + exit.width / 2;
+        const endY = exit.y;
         
-        // Clear current maze and recreate
-        maze.walls = [];
-        obstacles = [];
-        
-        // Recreate the maze with the new seed
-        createMazeWithSeed(newRandom, config);
-        
-        // Recursively check again
-        validateMazeExit();
+        // Create a simple path from start to exit
+        createDirectPath(startX, startY, endX, endY);
     }
+}
+
+// New function to create a direct path to the exit
+function createDirectPath(startX, startY, endX, endY) {
+    // Calculate path width based on ball size
+    const pathWidth = ball.radius * 3;
+    
+    // Remove walls that block the path
+    maze.walls = maze.walls.filter(wall => {
+        // Check if wall is in our path
+        if (isWallInPath(wall, startX, startY, endX, endY, pathWidth)) {
+            return false; // Remove this wall
+        }
+        return true; // Keep this wall
+    });
+    
+    console.log("Created direct path to exit");
+}
+
+// Helper function to determine if a wall blocks our path
+function isWallInPath(wall, startX, startY, endX, endY, pathWidth) {
+    // Get center of wall
+    const wallCenterX = wall.x + wall.width / 2;
+    const wallCenterY = wall.y + wall.height / 2;
+    
+    // Calculate distance from wall center to line segment from start to end
+    const distance = distanceToLineSegment(
+        wallCenterX, wallCenterY,
+        startX, startY,
+        endX, endY
+    );
+    
+    // If distance is less than half path width plus half wall size, wall is in path
+    return distance < (pathWidth / 2 + Math.max(wall.width, wall.height) / 2);
+}
+
+// Calculate distance from point to line segment
+function distanceToLineSegment(px, py, x1, y1, x2, y2) {
+    const A = px - x1;
+    const B = py - y1;
+    const C = x2 - x1;
+    const D = y2 - y1;
+    
+    const dot = A * C + B * D;
+    const len_sq = C * C + D * D;
+    let param = -1;
+    
+    if (len_sq !== 0) {
+        param = dot / len_sq;
+    }
+    
+    let xx, yy;
+    
+    if (param < 0) {
+        xx = x1;
+        yy = y1;
+    } else if (param > 1) {
+        xx = x2;
+        yy = y2;
+    } else {
+        xx = x1 + param * C;
+        yy = y1 + param * D;
+    }
+    
+    const dx = px - xx;
+    const dy = py - yy;
+    
+    return Math.sqrt(dx * dx + dy * dy);
 }
 
 // Clear areas around exit and entrance to ensure they're accessible
